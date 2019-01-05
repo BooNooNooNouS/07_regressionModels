@@ -1,0 +1,110 @@
+---
+title: "Analysis on the mtcar dataset"
+author: "Karla Nunez"
+date: "Tuesday, July 14, 2015"
+output: html_document
+---
+
+#Executive Summary
+In this document we will describe the relationship between a set of variables and the fuel efficiency of 32 cars in miles/gallon.  For this purpose we will use the data extracted from the 1974 Motor Trend US magazine.  The 2 questions we will address are:  
+* Is an automatic or manual transmission better for MPG?  
+* Quantify the MPG difference between automatic and manual transmissions.  
+
+#Brief analysis on the data
+
+The dataset corresponds of 32 observations of 11 variables.  Since the intention of this study is to understand relationships between variables that could have an impact on fuel efficiency we created a correlation matrix mapping each pairwise combination of variables `abs_cor_mtcars` (Appendix A).  A reference dataframe `df_cor_mtcars`will be used throughout this document.
+
+```{r message=FALSE}
+library(dplyr)
+abs_cor_mtcars <- abs(cor(mtcars))
+df_cor_mtcars <- as.data.frame(abs_cor_mtcars) %>% 
+  mutate(variable=rownames(abs_cor_mtcars))
+```
+
+
+##Question 1: Is an automatic or manual transmission better for MPG?
+
+```{r}
+mpg_auto <-mtcars[mtcars$am==0,c("mpg")] 
+mpg_manual <- mtcars[mtcars$am==1,c("mpg")]
+```
+An simple boxplot (Appendix B) can easily give us the answer we are looking for, in this case we can see that automatic transmission as a mean of `r round(mean(mpg_auto),2)`MPG which is worse than the mean of `r round(mean(mpg_manual),2)`MPG for manual transmission.  However, we should create a hypothesis test to prove this.  
+$H_0$=There is no significant difference beween the cars with automatic and manual transmission. (Appendix C)
+
+```{r}
+t_test_transmission <- t.test(mpg_auto, mpg_manual)
+```
+
+With a p-value of `r t_test_transmission$p.value` we can reject the null hypothesis, therefore the conclussion is that there is a significant difference between the mileage on a car based on its transmission.  given that the mean efficiency of manual transmission cars is better than that of automatic transmission cars we conclude that **manual transmission is better than automatic transmission for MPG when no other factors are considered**.  If we want to take into account all of the factors that can contribute to this, we will have to look into a multi-variable regression model, explained in the next question.
+
+##Question 2: Quantify the MPG difference between automatic and manual transmissions.
+
+Our first step is to understand the relationship between mpg and the transmissions. (Appendix D)
+
+```{r}
+mpg_am_model <- lm(mpg~am, mtcars)
+sum_mpg_am_model <- summary(mpg_am_model)
+```
+
+Given that $R^2$ has a value of `r sum_mpg_am_model$r.squared` we can only explain `r round(sum_mpg_am_model$r.squared*100,2)`% of the variance, therefore we need to create multi-variable linear regressions to get a more accurate estimate by adding all of them in selectively removing those with low statistical significance.  This will be done using a stepwise search
+
+```{r}
+mpg_all_model <- lm(mpg~., mtcars)
+best_model <- step(mpg_all_model, trace=0)
+sum_best <- summary(best_model)
+sum_best
+```
+
+With the information above we can see that in this case $R^2$ has a value of `r sum_best$r.squared` which explains `r round(sum_best$r.squared*100, 2)` of the variance.
+
+In order to conclude we need to ensure that the variables we are choosing are not contributing to the model, for this we will consider
+$H_0$ = variables wt and qsec are not contributing to the model.
+```{r}
+an_var <- anova(best_model, mpg_am_model)
+an_var
+```
+with a p-value of `r an_var$p.value` we can reject the null hypothesis, therefore concluding that the **variables wt, and qsec are contributing to the model**.
+
+The remaining step consists of ensuring the residuals appear normally distribued and don't show signs of heteroskedasticity which can bee seen in appendix E.  With these graphs we can see that the variables are independent and are normally distributed.
+
+With all the information above we can conclude that **there is a difference in mileage between cars with manual transmission vs the ones with automatic transmission but there are other variables like the car's weight and qsec (1/4 mile time) contributing to these numbers.  With our best model we can conclude that manual transmission cars can provide `2.9358` more MPG than their automatic counterparts.**
+
+#Appendix
+
+###Appendix A: Correlation matrix
+```{r, echo=FALSE, fig.align='center', fig.height=4}
+library(corrplot)
+corrplot(abs_cor_mtcars, method="square", type="lower", diag=FALSE, order="FPC", 
+         addCoef.col=TRUE, addCoefasPercent=TRUE, cl.lim=c(0,1),
+         title="Correlations between variables as absolute percentages", mar=c(0,0,1,0))
+```
+
+###Appendix B: Boxplot of fuel efficiency per transmission
+
+```{r, echo=FALSE, fig.height=4}
+boxplot(mpg ~ I(ifelse(am==0, "automatic", "manual")), 
+        mtcars,
+        xlab="Transmission" ,
+        ylab="Fuel efficiency (mpg)",
+        col=c("#F28538", "#3C7DAB"),
+        main="Fuel efficiency per transmission")
+```
+
+
+###Appendix C: t-test between automatic and manual transmission for MPG
+```{r}
+t_test_transmission
+```
+
+
+###Appendix D: linear regression of mpg on transmission
+```{r}
+sum_mpg_am_model
+```
+
+###Appendix E: Residual plots
+
+```{r}
+par(mfrow=c(2,2))
+plot(best_model)
+```
